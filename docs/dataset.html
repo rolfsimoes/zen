@@ -969,8 +969,6 @@ the Zenodo API.</p></li>
 <li><p><strong>metadata</strong> (<em>Optional</em><em>[</em><em>Union</em><em>[</em><em>MetaGeneric</em><em>,</em><em>Dict</em><em>[</em><em>str</em><em>,</em><em>Any</em><em>]</em><em>]</em><em>]</em><em>=None</em>) – The metadata for the new
 deposition. Ignored if <cite>deposition</cite> is informed or the dataset already has a
 deposition.</p></li>
-<li><p><strong>deposition</strong> (<em>Optional</em><em>[</em><em>Union</em><em>[</em><a class="reference internal" href="#zen.dataset.Deposition" title="zen.dataset.Deposition"><em>Deposition</em></a><em>,</em><em>Dict</em><em>[</em><em>str</em><em>,</em><em>Any</em><em>]</em><em>,</em><em>int</em><em>]</em><em>]</em><em>=None</em>) – An existing deposition
-to bind with the current dataset.</p></li>
 <li><p><strong>create_if_not_exists</strong> (<em>bool=True</em>) – If there is no deposition linked to the current
 dataset, it creates a new deposition on Zenodo. Ignored if <cite>deposition</cite> parameter
 is informed.</p></li>
@@ -1184,6 +1182,32 @@ function becomes part of the name of the summarized property value.</p></li>
 <span class="go"> &#39;prereserve_doi&#39;: True}</span>
 </pre></div>
 </div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="zen.dataset.LocalFiles.update_deposition">
+<span class="sig-name descname"><span class="pre">update_deposition</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">deposition</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#zen.dataset.Deposition" title="zen.dataset.Deposition"><span class="pre">zen.dataset.Deposition</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#zen.dataset.Deposition" title="zen.dataset.Deposition"><span class="pre">zen.dataset.Deposition</span></a></span></span><a class="headerlink" href="#zen.dataset.LocalFiles.update_deposition" title="Permalink to this definition">¶</a></dt>
+<dd><p>Update the dataset deposition.</p>
+<p>Updates the current deposition associated with the dataset. Both depositions,
+previous and new, must be derived from the same concept id.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>deposition</strong> (<a class="reference internal" href="#zen.dataset.Deposition" title="zen.dataset.Deposition"><em>Deposition</em></a>) – An existing deposition to bind with the current dataset.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The deposition associated with the current dataset.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference internal" href="#zen.dataset.Deposition" title="zen.dataset.Deposition">Deposition</a></p>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>TypeError</strong> – If the provided deposition is not an instance of Deposition class.</p></li>
+<li><p><strong>ValueError</strong> – If the dataset already has an deposition and the new deposition does not come
+    from the same concept id as the previous deposition.</p></li>
+</ul>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">
