@@ -1646,10 +1646,10 @@ class Deposition(_BaseDataset):
         
         """ 
         try:
-            self.__init__(self._api, self._api.api.new_version_deposition(self._data['id']))
+            dep = Deposition(self._api, self._api.api.new_version_deposition(self._data['id']))
         except json.JSONDecodeError as e:
-            self._files.invalidate()
-        return self
+            dep.files.invalidate()
+        return dep
     
     @property
     def api(self) -> Zenodo: # type: ignore
