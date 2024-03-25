@@ -34,6 +34,15 @@ import zen.metadata as __metadata__
 import os
 import requests
 
+def _merge(param1: Optional[Dict[str,Any]],
+           param2: Optional[Dict[str,Any]]) -> Dict[str,Any]:
+    if param1 is None:
+        param1 = {}
+    if param2 is None:
+        param2 = {}
+    param1 = param1.copy()
+    param1.update(param2)
+    return param1
 
 class APIResponseError(Exception):
     """Exception for Zenodo API response errors.
@@ -111,10 +120,10 @@ class APIResponseError(Exception):
     def __init__(self, response: Response) -> None:
         self.status_code = response.status_code
         self.name = APIResponseError.bad_status_codes[self.status_code]['name']
-        self.description = self.get_respose_description(response)
+        self.description = self.get_response_description(response)
         super().__init__(f"Status code {self.status_code} ({self.name}): {self.description}")
     
-    def get_respose_description(self, response: Response) -> str:
+    def get_response_description(self, response: Response) -> str:
         """Returns the description of the error based on the response object. 
         
         Args: 
@@ -134,6 +143,69 @@ class APIResponseError(Exception):
                 return message
         except:
             return APIResponseError.bad_status_codes[self.status_code]['description']
+
+
+class _Request:
+    """Internal class for handling API 
+    
+    This class prepares HTTP requests and handles responses.
+    """ 
+    def __init__(self, base_url: str,
+                 token: Optional[str]=None,
+                 params: Optional[Dict[str,str]]=None, 
+                 headers: Optional[Dict[str,str]]=None) -> None:
+        self.base_url = base_url
+        self._params = dict() if params is None else params.copy()
+        self._headers = dict() if headers is None else headers.copy()
+        if token is not None:
+            self._params = _merge(self._params, {'access_token': f'{token}'})
+            self._headers = _merge(self._headers, {'Authorization': f'Bearer {token}'})
+    
+    def get(self, path: str,
+            params: Optional[Dict[str,str]]=None,
+            headers: Optional[Dict[str,str]]=None, **kwargs) -> Response:
+        url = f'{self.base_url}{path}'
+        response = requests.get(url, params=_merge(self._params, params), 
+                                headers=_merge(self._headers, headers), **kwargs)
+        if response.status_code in APIResponseError.bad_status_codes:
+            raise APIResponseError(response)
+        return response
+    
+    def post(self, path: str,
+             json: Optional[Dict[str,Any]]=None,
+             data: Optional[Any]=None,
+             params: Optional[Dict[str,str]]=None,
+             headers: Optional[Dict[str,str]]=None, **kwargs) -> Response:
+        url = f'{self.base_url}{path}'
+        response = requests.post(url, data=data, json=json, params=_merge(self._params, params), 
+                                 headers=_merge(self._headers, headers), **kwargs)
+        if response.status_code in APIResponseError.bad_status_codes:
+            raise APIResponseError(response)
+        return response
+    
+    def put(self, path: str,
+            json: Optional[Dict[str,Any]]=None,
+            data: Optional[Any]=None,
+            params: Optional[Dict[str,str]]=None,
+            headers: Optional[Dict[str,str]]=None, **kwargs) -> Response:
+        url = f'{self.base_url}{path}'
+        response = requests.put(url, data=data, json=json, params=_merge(self._params, params), 
+                                headers=_merge(self._headers, headers), **kwargs)
+        if response.status_code in APIResponseError.bad_status_codes:
+            raise APIResponseError(response)
+        return response
+    
+    def delete(self, path: str,
+               json: Optional[Dict[str,Any]]=None,
+               data: Optional[Any]=None,
+               params: Optional[Dict[str,str]]=None,
+               headers: Optional[Dict[str,str]]=None, **kwargs) -> Response:
+        url = f'{self.base_url}{path}'
+        response = requests.delete(url, data=data, json=json, params=_merge(self._params, params), 
+                                   headers=_merge(self._headers, headers), **kwargs)
+        if response.status_code in APIResponseError.bad_status_codes:
+            raise APIResponseError(response)
+        return response
 
 
 class _APIRequest:
