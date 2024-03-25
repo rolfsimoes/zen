@@ -831,10 +831,7 @@ class LocalFiles(_FileDataset):
         
         Get the deposition of the dataset. If the dataset has no linked deposition, the `deposition` 
         parameter is `None` and the `create_if_not_exists` parameter is `True`, it creates a 
-        new deposition. The linked deposition is saved into dataset file. If a new deposition is
-        supplied in `deposition` parameter, it updates the current deposition associated with the 
-        dataset. To be updated, both depositions, old and new, must be derived from the same 
-        concept id.
+        new deposition. The linked deposition is saved into dataset file. 
         
         Args:
             url (str): The base URL of the Zenodo API. 
@@ -844,8 +841,6 @@ class LocalFiles(_FileDataset):
             metadata (Optional[Union[MetaGeneric,Dict[str,Any]]]=None): The metadata for the new 
                 deposition. Ignored if `deposition` is informed or the dataset already has a 
                 deposition.
-            deposition (Optional[Union[Deposition,Dict[str,Any],int]]=None): An existing deposition 
-                to bind with the current dataset.
             create_if_not_exists (bool=True): If there is no deposition linked to the current
                 dataset, it creates a new deposition on Zenodo. Ignored if `deposition` parameter
                 is informed.
@@ -864,30 +859,18 @@ class LocalFiles(_FileDataset):
             raise ValueError('Invalid operation. Please, use `save()` method to save the ' + 
                              'dataset before assigning a deposition.')
         dataset = _DatasetFile.from_file(self._file)
-        if deposition is None:
-            api = Zenodo(url, token, headers)
-            if dataset.deposition is None:
-                if not create_if_not_exists:
-                    raise ValueError('No deposition is linked with current dataset. Please, ' +
-                                     'provide a valid deposition to `deposition` parameter, or ' +
-                                     'inform `create_if_not_exists=True` to create a new ' +
-                                     'deposition.')
-                # check if file is writeable
-                dataset.save(self._file)
-                deposition = api.depositions.create(metadata)
-            else:
-                deposition = api.depositions.retrieve(dataset.deposition)
+        api = Zenodo(url, token, headers)
+        if dataset.deposition is None:
+            if not create_if_not_exists:
+                raise ValueError('No deposition is linked with current dataset. Please, ' +
+                                    'provide a valid deposition to `deposition` parameter, or ' +
+                                    'inform `create_if_not_exists=True` to create a new ' +
+                                    'deposition.')
+            # check if file is writeable
+            dataset.save(self._file)
+            deposition = api.depositions.create(metadata)
         else:
-            if not isinstance(deposition, Deposition):
-                api = Zenodo(url, token, headers)
-                deposition = api.depositions.retrieve(deposition)
-            if dataset.deposition is not None:
-                saved_deposition = api.depositions.retrieve(dataset.deposition)
-                if saved_deposition.concept_id != deposition.concept_id:
-                    raise ValueError('Invalid deposition assignment. The current deposition ' +
-                                    f'({saved_deposition.id}) does not share the same concept id ' +
-                                    f'as the provided one`s concept id ({deposition.id}). ' +
-                                    'Please, consider creating a new dataset.')
+            deposition = api.depositions.retrieve(dataset.deposition)
         dataset.deposition = deposition.data
         dataset.save(self._file)
         return deposition
@@ -895,8 +878,8 @@ class LocalFiles(_FileDataset):
     def update_deposition(self, deposition: Deposition) -> Deposition:
         """Update the dataset deposition.
         
-        Updates the current deposition associated with the dataset. To be updated, both depositions, 
-        old and new, must be derived from the same concept id.
+        Updates the current deposition associated with the dataset. Both depositions, 
+        previous and new, must be derived from the same concept id.
         
         Args:
             deposition (Deposition): An existing deposition to bind with the current dataset.
@@ -910,10 +893,23 @@ class LocalFiles(_FileDataset):
                 from the same concept id as the previous deposition.
         
         """ 
+        if self._file is None:
+            raise ValueError('Invalid operation. Please, use `save()` method to save the ' + 
+                             'dataset before assigning a deposition.')
         if not isinstance(deposition, Deposition):
             raise TypeError('Invalid `deposition` parameter. Expecting a `Deposition` object ' +
                             f'but got a `{type(deposition)}` instead.')
-        return self.get_deposition(deposition=deposition)
+        dataset = _DatasetFile.from_file(self._file)
+        if dataset.deposition is not None:
+            saved_deposition = Deposition(deposition.api, dataset.deposition)
+            if saved_deposition.concept_id != deposition.concept_id:
+                raise ValueError('Invalid deposition assignment. The current deposition ' +
+                                f'({saved_deposition.id}) does not share the same concept id ' +
+                                f'as the provided one`s concept id ({deposition.id}). ' +
+                                'Please, consider creating a new dataset.')
+        dataset.deposition = deposition.data
+        dataset.save(self._file)
+        return deposition
     
     def save(self, file: Optional[str]=None) -> LocalFiles:
         """Saves the dataset metadata.
@@ -1673,13 +1669,14 @@ class Deposition(_BaseDataset):
         
         """ 
         try:
-            dep = Deposition(self._api, self._api.api.new_version_deposition(self._data['id']))
+            data = self._api.api.new_version_deposition(self._data['id'])
+            deposition = Deposition(self._api, data)
         except json.JSONDecodeError as e:
-            dep.files.invalidate()
-        return dep
+            deposition.files.invalidate()
+        return deposition
     
     @property
-    def api(self) -> Zenodo: # type: ignore
+    def api(self) -> Zenodo:
         """The Zenodo object to interact with Zenodo API.
         """ 
         return self._api
