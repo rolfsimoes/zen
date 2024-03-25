@@ -1670,13 +1670,16 @@ class Deposition(_BaseDataset):
         """ 
         try:
             data = self._api.api.new_version_deposition(self._data['id'])
-            deposition = Deposition(self._api, data)
+            dep = Deposition(self._api, data)
+            metadata = deepcopy(self.metadata.data)
+            metadata.update(deepcopy(dep.metadata.data))
+            dep.metadata.data.update(metadata)
         except json.JSONDecodeError as e:
-            deposition.files.invalidate()
-        return deposition
+            dep.files.invalidate()
+        return dep
     
     @property
-    def api(self) -> Zenodo:
+    def api(self) -> Zenodo: # type: ignore
         """The Zenodo object to interact with Zenodo API.
         """ 
         return self._api
