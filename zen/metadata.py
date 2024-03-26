@@ -1061,23 +1061,6 @@ class Metadata(_MetaBaseObject):
     ]
     
     @classmethod
-    def _check_data(cls, data: Optional[Dict[str,Any]]=None) -> None:
-        if data is not None and not isinstance(data, dict):
-            raise TypeError(f'Invalid `data` parameter. Value must be `dict` but got `{type(data)}`.')
-        if 'metadata' not in data:
-            raise ValueError("Invalid `data` parameter. Value must have 'metadata' key entry.")
-        metadata = data['metadata']
-        if 'upload_type' in metadata and metadata['upload_type'] not in Metadata.upload_types:
-            raise ValueError("Invalid 'metadata.upload_type' value. Please, see `upload_types` " + 
-                             "attribute for supported options.")
-        if 'embargo_date' in metadata:
-            if not __utils__.is_iso8601_date(metadata['embargo_date']):
-                raise ValueError("Invalid 'metadata.embargo_date' value. Format must be 'YYYY-MM-DD'.")
-        if 'publication_date' in metadata:
-            if not __utils__.is_iso8601_date(metadata['publication_date']):
-                raise ValueError("Invalid 'metadata.publication_date' value. Format must be 'YYYY-MM-DD'.")
-        
-    @classmethod
     def from_file(cls, file: str) -> Metadata:
         """Create a metadata instance from a JSON file.
         
@@ -1100,8 +1083,23 @@ class Metadata(_MetaBaseObject):
         return cls(data)
     
     def __init__(self, data: Optional[Dict[str,Any]]=None) -> Metadata:
-        Metadata._check_data(data)
-        return super().__init__(data, 'metadata')
+        if data is not None and not isinstance(data, dict):
+            raise TypeError(f'Invalid `data` parameter. Value must be `dict` but got `{type(data)}`.')
+        if 'metadata' not in data:
+            raise ValueError("Invalid `data` parameter. Value must have 'metadata' key entry.")
+        metadata = data['metadata']
+        if 'upload_type' in metadata and metadata['upload_type'] not in Metadata.upload_types:
+            raise ValueError("Invalid 'metadata.upload_type' value. Please, see `upload_types` " + 
+                             "attribute for supported options.")
+        if 'embargo_date' in metadata:
+            if not __utils__.is_iso8601_date(metadata['embargo_date']):
+                raise ValueError("Invalid 'metadata.embargo_date' value. Format must be 'YYYY-MM-DD'.")
+        if 'publication_date' in metadata:
+            if not __utils__.is_iso8601_date(metadata['publication_date']):
+                raise ValueError("Invalid 'metadata.publication_date' value. Format must be 'YYYY-MM-DD'.")
+        else:
+            metadata['publication_date'] = __utils__.get_iso8601_date()
+        super().__init__(data, 'metadata')
     
     def render(self, replacements: Optional[Dict[str,Any]]=None) -> Dict[str,Any]:
         """Render the metadata by replacing placeholders with provided values.
@@ -1198,6 +1196,19 @@ class Metadata(_MetaBaseObject):
             raise ValueError('Invalid `publication_type` parameter. Please, see `Publication.publication_types` ' +
                              'attribute for supported options.')
         self.data['publication_type'] = value
+    
+    
+    @property
+    def publication_date(self) -> str:
+        """Date of publication in ISO8601 format (YYYY-MM-DD).
+        """
+        return self.data['publication_date']
+    
+    @upload_type.setter
+    def publication_date(self, value: str) -> None:
+        if not __utils__.is_iso8601_date(value):
+            raise ValueError("Invalid `publication_date` parameter. Format must be 'YYYY-MM-DD'.")
+        self.data['publication_date'] = value
     
     @property
     def image_type(self) -> str:
