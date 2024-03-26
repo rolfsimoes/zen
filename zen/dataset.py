@@ -1670,6 +1670,7 @@ class Deposition(_BaseDataset):
         """ 
         data = self._api.api.new_version_deposition(self._data['id'])
         dep = Deposition(self._api, data)
+        dep.update()
         return dep
     
     @property
