@@ -444,4 +444,14 @@ def is_iso8601_datetime(value: str) -> bool:
         return True
     except ValueError:
         return False
-    
+
+
+def get_iso8601_date() -> str:
+    """Get the current date in ISO 8601 format (YYYY-MM-DD).
+
+    Returns:
+        str: The current date in ISO 8601 format.
+    """
+    current_date = datetime.now()
+    formatted_date = current_date.strftime('%Y-%m-%d')
+    return formatted_date

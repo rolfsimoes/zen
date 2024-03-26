@@ -1668,14 +1668,8 @@ class Deposition(_BaseDataset):
             Deposition: The new version of the current Deposition object. 
         
         """ 
-        try:
-            data = self._api.api.new_version_deposition(self._data['id'])
-            dep = Deposition(self._api, data)
-            metadata = deepcopy(self.metadata.data)
-            metadata.update(deepcopy(dep.metadata.data))
-            dep.metadata.data.update(metadata)
-        except json.JSONDecodeError as e:
-            dep.files.invalidate()
+        data = self._api.api.new_version_deposition(self._data['id'])
+        dep = Deposition(self._api, data)
         return dep
     
     @property
