@@ -445,7 +445,6 @@ def is_iso8601_datetime(value: str) -> bool:
     except ValueError:
         return False
 
-
 def get_iso8601_date() -> str:
     """Get the current date in ISO 8601 format (YYYY-MM-DD).
 
@@ -455,3 +454,13 @@ def get_iso8601_date() -> str:
     current_date = datetime.now()
     formatted_date = current_date.strftime('%Y-%m-%d')
     return formatted_date
+
+def merge(dict1: Optional[Dict[str,Any]],
+          dict2: Optional[Dict[str,Any]]) -> Dict[str,Any]:
+    if dict1 is None:
+        dict1 = dict()
+    if dict2 is None:
+        dict2 = dict()
+    dict1 = dict1.copy()
+    dict1.update(dict2)
+    return dict1

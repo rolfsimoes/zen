@@ -1270,8 +1270,10 @@ class LocalFiles(_FileDataset):
         if not isinstance(deposition, Deposition):
             raise TypeError('Invalid `deposition` value. Expecting a `Deposition` but got a ' +
                             f'{type(deposition)} instead.')
+        
         def _upload(file: LocalFile) -> None:
             file.upload(deposition, force)
+        
         try:
             self._for_each(_upload, progress)
         finally:

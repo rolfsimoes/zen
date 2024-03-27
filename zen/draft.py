@@ -3,7 +3,7 @@ from typing import Tuple, List, Dict, Any, Optional, Union, Iterator, TYPE_CHECK
 from typing_extensions import Self
 from .api import _Request
 from .api import Zenodo
-from .utils import load_json, save_json
+from .utils import load_json, save_json, merge
 
 def _embargo(active, until, reason):
     data = dict(active=active)
@@ -35,67 +35,138 @@ def list_drafts(token: str,
                 base_url=Zenodo.url, 
                 params: Optional[Dict[str,str]]=None, 
                 headers: Optional[Dict[str,str]]=None) -> Draft:
-    req = _Request(base_url=base_url, token=token, params=params, headers=headers)
+    req = _Request(token, base_url, params, headers)
     query = dict(q=q, sort=sort, size=size, page=page, allversions=all_versions)
     response = req.get(f'/api/user/records', params=query)
-    return response.json()
+    data = response.json()
+    return data
 
 def create_draft(token: str,
-                 record_access=access_public(),
-                 files_enabled=True,
-                 base_url=Zenodo.url, 
+                 base_url: str=Zenodo.url, 
                  params: Optional[Dict[str,str]]=None, 
                  headers: Optional[Dict[str,str]]=None) -> Draft:
-    req = _Request(base_url, token, params, headers)
-    body = dict(access=record_access, files=dict(enabled=files_enabled))
+    req = _Request(token, base_url, params, headers)
+    body = dict(access=access_public(), files=dict(enabled=True))
     response = req.post(f'/api/records', json=body)
     data = response.json()
-    return Draft(data=data, token=token, base_url=base_url, params=params, headers=headers)
+    return data
 
 def get_draft(id: str, 
               token: str,
-              base_url=Zenodo.url, 
+              base_url: str=Zenodo.url, 
               params: Optional[Dict[str,str]]=None, 
               headers: Optional[Dict[str,str]]=None) -> Draft:
-    req = _Request(base_url, token, params, headers)
+    req = _Request(token, base_url, params, headers)
     response = req.get(f'/api/records/{id}/draft')
     data = response.json()
-    return Draft(data=data, token=token, base_url=base_url, params=params, headers=headers)
+    return data
 
 def load_draft(filename: str,
                token: str,
-               base_url=Zenodo.url, 
+               base_url: str=Zenodo.url, 
                params: Optional[Dict[str,str]]=None, 
                headers: Optional[Dict[str,str]]=None) -> Draft:
     try:
-        data = load_json(file=filename)
+        data = load_json(filename)
         if not isinstance(data, dict):
             raise TypeError('Invalid file content. Expecting `dict` ' +
                             f'but got `{type(data)}` instead.')
         if 'id' not in data:
             raise ValueError('Invalid file content. `id` entry not found.')
         id = data['id']
-        return get_draft(id, token=token, base_url=base_url, params=params, headers=headers)
+        return get_draft(id, token, base_url, params, headers)
     except FileNotFoundError:
         raise FileNotFoundError(f'File `{filename}` not found.')
 
 def load_or_create_draft(filename: str,
                          token: str,
-                         record_access=access_public(),
-                         files_enabled=True,
-                         base_url=Zenodo.url, 
-                         params: Optional[Dict[str,str]]=None, 
+                         base_url: str=Zenodo.url,
+                         params: Optional[Dict[str,str]]=None,
                          headers: Optional[Dict[str,str]]=None) -> Draft:
     try:
-        return load_draft(filename=filename, token=token, base_url=base_url, params=params, 
-                          headers=headers)
+        draft = load_draft(filename, token, base_url, params, headers)
     except FileNotFoundError:
-        data = create_draft(token=token, record_access=record_access, 
-                            files_enabled=files_enabled, base_url=base_url, params=params, 
-                            headers=headers)
-        save_json(data=data, file=filename)
+        draft = create_draft(token, base_url, params, headers)
+        draft.to_json(filename)
+    return draft
 
-class Draft:
+def get_record(id: str, 
+               base_url: str=Zenodo.url, 
+               params: Optional[Dict[str,str]]=None, 
+               headers: Optional[Dict[str,str]]=None) -> Draft:
+    req = _Request(None, base_url, params, headers)
+    response = req.get(f'/api/records/{id}')
+    data = response.json()
+    return data
+
+def search_records(q: Optional[str]=None, 
+                   sort: str=None, 
+                   size: int=10, 
+                   page: int=1, 
+                   all_versions: bool=False,
+                   accept: str='application/json',
+                   base_url: str=Zenodo.url, 
+                   params: Optional[Dict[str,str]]=None, 
+                   headers: Optional[Dict[str,str]]=None) -> Draft:
+    req = _Request(None, base_url, params, merge(headers, dict(Accept=accept)))
+    query = dict(q=q, sort=sort, size=size, page=page, allversions=all_versions)
+    response = req.get(f'/api/user/records', params=query)
+    data = response.json()
+    return data
+
+
+class _BaseRecord:
+    def __init__(self, 
+                 data: Dict[str,Any], 
+                 token: str, 
+                 base_url: str=Zenodo.url, 
+                 params: Optional[Dict[str,str]]=None, 
+                 headers: Optional[Dict[str,str]]=None) -> None:
+        if not isinstance(data, dict):
+            raise TypeError('Invalid `data` parameter. Expecting `dict` ' +
+                            f'but got `{type(data)}` instead.')
+        if 'id' not in data:
+            raise ValueError('Invalid data parameter. `id` entry not found.')
+        self._data = data
+        self._req = _Request(base_url, token, params, headers)
+    
+    def to_json(self, filename: str) -> None:
+        """Saves the draft data to a JSON file.
+
+        Args:
+            filename (str): The name of the JSON file to save.
+
+        Raises:
+            FileNotFoundError: If the file cannot be created or written to.
+        """
+        save_json(data=self._data, file=filename)
+    
+    @property
+    def access(self) -> Dict:
+        return self._data['access']
+
+    @property
+    def files(self) -> Dict:
+        return self._data['files']
+
+    @property
+    def id(self) -> str:
+        return self._data['id']
+    
+    @property
+    def is_published(self) -> bool:
+        return self._data['is_published']
+    
+    @property
+    def links(self) -> Dict:
+        return self._data['links']
+    
+    @property
+    def metadata(self) -> Dict:
+        return self._data['metadata']
+
+
+class Draft(_BaseRecord):
     """Represents a new record
     
     Used for interacting with unpublished or edited draft records.
@@ -134,18 +205,14 @@ class Draft:
         >>> dep.discard()
     
     """ 
-    def __init__(self, data: Dict[str,Any], token: str, 
+    def __init__(self, 
+                 data: Dict[str,Any], 
+                 token: str, 
                  base_url: str=Zenodo.url, 
                  params: Optional[Dict[str,str]]=None, 
                  headers: Optional[Dict[str,str]]=None) -> None:
-        if not isinstance(data, dict):
-            raise TypeError('Invalid `data` parameter. Expecting `dict` ' +
-                            f'but got `{type(data)}` instead.')
-        if 'id' not in data:
-            raise ValueError('Invalid data parameter. `id` entry not found.')
-        self._data = data
-        self._req = _Request(base_url, token, params, headers)
-
+        super().__init__(data, token, base_url, params, headers)
+    
     def refresh(self) -> Self:
         """Refreshes the draft data from API.
         
@@ -163,10 +230,10 @@ class Draft:
         self._data = response.json()
         return self
 
-    def save(self, custom_fields: Optional[List[str]]=None) -> Self:
-        """Saves changes made to the draft.
+    def update(self, custom_fields: Optional[List[str]]=None) -> Self:
+        """Updates changes made to the draft.
         
-        This method saves the draft's editions on its metadata property.
+        This method updates the draft's editions on the API.
         
         Returns:
             Draft: The current Draft object.
@@ -231,17 +298,6 @@ class Draft:
             APIResponseError: If the response status code indicates an error during the API request.
         """
         self._req.delete('/api/records/{id}/draft')
-    
-    def to_json(self, filename: str) -> None:
-        """Saves the draft data to a JSON file.
-
-        Args:
-            filename (str): The name of the JSON file to save.
-
-        Raises:
-            FileNotFoundError: If the file cannot be created or written to.
-        """
-        save_json(data=self._data, file=filename)
 
     @property
     def id(self) -> str:
