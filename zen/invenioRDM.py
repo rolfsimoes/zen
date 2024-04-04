@@ -26,7 +26,8 @@ from typing import Tuple, List, Dict, Any, Optional, Union, Iterator, TYPE_CHECK
 from typing_extensions import Self
 import requests
 import os
-from .utils import merge
+from .record import Draft, Record
+from .utils import merge, load_json
 if TYPE_CHECKING:
     from requests import Response
 
@@ -130,86 +131,7 @@ class InvenioRDMError(Exception):
         except:
             return InvenioRDMError.bad_status_codes[self.status_code]['description']
 
-
-class _HTTPRequest:
-    """Internal class for handling API 
-    
-    This class prepares HTTP requests and handles responses.
-    """ 
-    def __init__(self, 
-                 token: Optional[str]=None,
-                 base_url: str='https://InvenioRDM.org',
-                 params: Optional[Dict[str,str]]=None, 
-                 headers: Optional[Dict[str,str]]=None) -> None:
-        # To-Do: check input parameters
-        self.base_url = base_url
-        self._params = None
-        self._headers = None
-        self._update_headers(dict(Accept='application/json'))
-        if token is not None:
-            self._update_params(dict(access_token=f'{token}'))            
-            self._update_headers(dict(Authorization=f'Bearer {token}'))
-        self._update_params(params)
-        self._update_headers(headers)
-    
-    def _update_params(self, params):
-        self._params = merge(self._params, params)
-    
-    def _update_headers(self, headers):
-        self._headers = merge(self._headers, headers)
-    
-    def get(self, 
-            path: str,
-            params: Optional[Dict[str,str]]=None,
-            headers: Optional[Dict[str,str]]=None, **kwargs) -> Response:
-        url = f'{self.base_url}{path}'
-        response = requests.get(url, params=merge(self._params, params), 
-                                headers=merge(self._headers, headers), **kwargs)
-        if response.status_code in InvenioRDMError.bad_status_codes:
-            raise InvenioRDMError(response)
-        return response
-    
-    def post(self, 
-             path: str,
-             json: Optional[Dict[str,Any]]=None,
-             data: Optional[Any]=None,
-             params: Optional[Dict[str,str]]=None,
-             headers: Optional[Dict[str,str]]=None, **kwargs) -> Response:
-        url = f'{self.base_url}{path}'
-        response = requests.post(url, data=data, json=json, params=merge(self._params, params), 
-                                 headers=merge(self._headers, headers), **kwargs)
-        if response.status_code in InvenioRDMError.bad_status_codes:
-            raise InvenioRDMError(response)
-        return response
-    
-    def put(self, 
-            path: str,
-            json: Optional[Dict[str,Any]]=None,
-            data: Optional[Any]=None,
-            params: Optional[Dict[str,str]]=None,
-            headers: Optional[Dict[str,str]]=None, **kwargs) -> Response:
-        url = f'{self.base_url}{path}'
-        response = requests.put(url, data=data, json=json, params=merge(self._params, params), 
-                                headers=merge(self._headers, headers), **kwargs)
-        if response.status_code in InvenioRDMError.bad_status_codes:
-            raise InvenioRDMError(response)
-        return response
-    
-    def delete(self, 
-               path: str,
-               json: Optional[Dict[str,Any]]=None,
-               data: Optional[Any]=None,
-               params: Optional[Dict[str,str]]=None,
-               headers: Optional[Dict[str,str]]=None, **kwargs) -> Response:
-        url = f'{self.base_url}{path}'
-        response = requests.delete(url, data=data, json=json, params=merge(self._params, params), 
-                                   headers=merge(self._headers, headers), **kwargs)
-        if response.status_code in InvenioRDMError.bad_status_codes:
-            raise InvenioRDMError(response)
-        return response
-
-
-class InvenioRDMClient:
+class InvenioRDM:
     """Interact with InvenioRDM API.
     
     This class provides methods to interact with various aspects of the InvenioRDM API, such as 
@@ -224,10 +146,217 @@ class InvenioRDMClient:
             API requests. 
     
     """ 
-    def __init__(self, base_url: str, token: Optional[str]=None, params: Optional[Dict[str,str]]=None, 
+    def __init__(self, 
+                 base_url: str, 
+                 token: Optional[str]=None, 
+                 params: Optional[Dict[str,str]]=None, 
                  headers: Optional[Dict[str,str]]=None) -> None:
+        # To-Do: check input parameters
         self.base_url = base_url.rstrip('/')
-        self._req = _HTTPRequest(token, params, headers)
+        self._params = None
+        self._headers = dict(Accept='application/json')
+        if token is not None:
+            self._params = merge(self._params, dict(access_token=f'{token}'))
+            self._headers = merge(self._headers, dict(Authorization=f'Bearer {token}'))
+        if params is not None:
+            self._params = merge(self._params, params)
+        if headers is not None:
+            self._headers = merge(self._headers, headers)
+    
+    def _get(self, 
+            path: str,
+            params: Optional[Dict[str,str]]=None,
+            headers: Optional[Dict[str,str]]=None, **kwargs) -> Response:
+        url = f'{self.base_url}{path}'
+        response = requests.get(url, params=merge(self._params, params), 
+                                headers=merge(self._headers, headers), **kwargs)
+        if response.status_code in InvenioRDMError.bad_status_codes:
+            raise InvenioRDMError(response)
+        return response
+    
+    def _post(self, 
+             path: str,
+             json: Optional[Dict[str,Any]]=None,
+             data: Optional[Any]=None,
+             params: Optional[Dict[str,str]]=None,
+             headers: Optional[Dict[str,str]]=None, **kwargs) -> Response:
+        url = f'{self.base_url}{path}'
+        response = requests.post(url, data=data, json=json, params=merge(self._params, params), 
+                                 headers=merge(self._headers, headers), **kwargs)
+        if response.status_code in InvenioRDMError.bad_status_codes:
+            raise InvenioRDMError(response)
+        return response
+    
+    def _put(self, 
+            path: str,
+            json: Optional[Dict[str,Any]]=None,
+            data: Optional[Any]=None,
+            params: Optional[Dict[str,str]]=None,
+            headers: Optional[Dict[str,str]]=None, **kwargs) -> Response:
+        url = f'{self.base_url}{path}'
+        response = requests.put(url, data=data, json=json, params=merge(self._params, params), 
+                                headers=merge(self._headers, headers), **kwargs)
+        if response.status_code in InvenioRDMError.bad_status_codes:
+            raise InvenioRDMError(response)
+        return response
+    
+    def _delete(self, 
+               path: str,
+               json: Optional[Dict[str,Any]]=None,
+               data: Optional[Any]=None,
+               params: Optional[Dict[str,str]]=None,
+               headers: Optional[Dict[str,str]]=None, **kwargs) -> Response:
+        url = f'{self.base_url}{path}'
+        response = requests.delete(url, data=data, json=json, params=merge(self._params, params), 
+                                   headers=merge(self._headers, headers), **kwargs)
+        if response.status_code in InvenioRDMError.bad_status_codes:
+            raise InvenioRDMError(response)
+        return response
+    
+    def list_drafts(self,
+                    q: Optional[str]=None, 
+                    sort: str=None, 
+                    size: int=10, 
+                    page: int=1, 
+                    all_versions: bool=False,
+                    params: Optional[Dict[str,str]]=None, 
+                    headers: Optional[Dict[str,str]]=None) -> Draft:
+        """Retrieves a list of drafts from the InvenioRDM API. 
+    
+        Args: 
+            query_args (Optional[Dict[str,Any]]=None): Additional query arguments for the API request. 
+            **kwargs: Additional keyword arguments for the API request. 
+    
+        Returns: 
+            dict: The response JSON containing the list of drafts. 
+    
+        Raises: 
+            TypeError: If the query_args parameter is not a dictionary. 
+            APIResponseError: If the response status code indicates an error during the API request. 
+        """ 
+        query = dict(q=q, sort=sort, size=size, page=page, allversions=all_versions)
+        response = self._get(f'/api/user/records', 
+                             params=merge(params, query), 
+                             headers=headers)
+        data = response.json()
+        return data
+
+    def create_draft(self,
+                     params: Optional[Dict[str,str]]=None, 
+                     headers: Optional[Dict[str,str]]=None) -> Draft:
+        """Creates a new deposition on the InvenioRDM API. 
+    
+        Args: 
+            metadata (Optional[Dict[str,Any]]=None): The metadata for the new deposition. 
+            **kwargs: Additional keyword arguments for the API request. 
+    
+        Returns: 
+            dict: The response JSON containing the newly created deposition. 
+    
+        Raises: 
+            ValueError: If the metadata parameter is not a dictionary. 
+            APIResponseError: If the response status code indicates an error during the API request. 
+        """ 
+        body = dict(access=access_public(), files=dict(enabled=True))
+        response = self._post(f'/api/records', json=body, params=params, headers=headers)
+        data = response.json()
+        return Draft(data, self)
+
+    def get_draft(self,
+                  id: str, 
+                  params: Optional[Dict[str,str]]=None, 
+                  headers: Optional[Dict[str,str]]=None) -> Draft:
+        """Retrieves a specific deposition from the InvenioRDM API.
+
+        Args: 
+            deposition_id (Union[int,Dict]): The ID of the deposition to retrieve, or a dictionary 
+                containing the deposition information. 
+            **kwargs: Additional keyword arguments for the API request. 
+        
+        Returns: 
+            dict: The response JSON containing the deposition information. 
+        
+        Raises: 
+            APIResponseError: If the response status code indicates an error during the API request. 
+        
+        """ 
+        response = self._get(f'/api/records/{id}/draft', params=params, headers=headers)
+        data = response.json()
+        return Draft(data, self)
+
+    def load_draft(self,
+                   filename: str,
+                   params: Optional[Dict[str,str]]=None, 
+                   headers: Optional[Dict[str,str]]=None) -> Draft:
+        try:
+            data = load_json(filename)
+            if not isinstance(data, dict):
+                raise TypeError('Invalid file content. Expecting `dict` ' +
+                                f'but got `{type(data)}` instead.')
+            if 'id' not in data:
+                raise ValueError('Invalid file content. `id` entry not found.')
+            id = data['id']
+            return self.get_draft(id, params, headers)
+        except FileNotFoundError:
+            raise FileNotFoundError(f'File `{filename}` not found.')
+
+    def load_or_create_draft(self,
+                             filename: str,
+                             params: Optional[Dict[str,str]]=None,
+                             headers: Optional[Dict[str,str]]=None) -> Draft:
+        try:
+            draft = self.load_draft(filename, params, headers)
+        except FileNotFoundError:
+            draft = self.create_draft(params, headers)
+            draft.to_json(filename)
+        return draft
+
+    def get_record(self,
+                   id: str,
+                   params: Optional[Dict[str,str]]=None, 
+                   headers: Optional[Dict[str,str]]=None) -> Draft:
+        """Retrieves a record from the InvenioRDM API. 
+    
+        Args: 
+            id (str): The ID of the record to be retrieved.
+            
+        Returns: 
+            Record: The retrieved Record. 
+    
+        Raises: 
+            InvenioRDMError: If the response status code indicates an error during the request.
+        """ 
+        response = self._get(f'/api/records/{id}', params=params, headers=headers)
+        data = response.json()
+        return Record(data, self)
+
+    def search_records(self,
+                       q: Optional[str]=None, 
+                       sort: str=None, 
+                       size: int=10, 
+                       page: int=1, 
+                       all_versions: bool=False,
+                       params: Optional[Dict[str,str]]=None, 
+                       headers: Optional[Dict[str,str]]=None) -> Draft:
+        """Searches a list of records from the InvenioRDM API. 
+    
+        Args: 
+            query_args (Optional[Dict[str,Any]]=None): Additional query arguments for the API request. 
+            **kwargs: Additional keyword arguments for the API request. 
+    
+        Returns: 
+            dict: The response JSON containing the list of records. 
+    
+        Raises: 
+            TypeError: If the query_args parameter is not a dictionary. 
+            APIResponseError: If the response status code indicates an error during the API request. 
+        """ 
+        query = dict(q=q, sort=sort, size=size, page=page, allversions=all_versions)
+        response = self._get(f'/api/records', 
+                             params=merge(params, query), 
+                             headers=headers)
+        data = response.json()
+        return data
     
     def list_licenses(self, query_args: Optional[Dict[str,Any]]=None, 
                           **kwargs) -> Dict:
@@ -272,47 +401,6 @@ class InvenioRDMClient:
         response = self._req.get(url, **kwargs)
         return response.json()
     
-    def list_records(self, query_args: Optional[Dict[str,Any]]=None, **kwargs) -> Dict:
-        """Retrieves a list of records from the InvenioRDM API. 
-    
-        Args: 
-            query_args (Optional[Dict[str,Any]]=None): Additional query arguments for the API request. 
-            **kwargs: Additional keyword arguments for the API request. 
-    
-        Returns: 
-            dict: The response JSON containing the list of records. 
-    
-        Raises: 
-            TypeError: If the query_args parameter is not a dictionary. 
-            APIResponseError: If the response status code indicates an error during the API request. 
-        """ 
-        if query_args is not None and not isinstance(query_args, dict):
-            raise TypeError('Invalid `query_args` parameter. Value must be `dict` but got ' +
-                            f'`{type(query_args)}` instead.')
-        url = f"{self.base_url}/api/records"
-        response = self._req.get(url, params=query_args, **kwargs)
-        return response.json()
-    
-    def retrieve_record(self, record_id: Union[int,Dict], **kwargs) -> Dict:
-        """Retrieves a specific record from the InvenioRDM API. 
-    
-        Args: 
-            record_id (Union[int,Dict]): The ID of the record to retrieve, or a dictionary containing 
-                the record information. 
-            **kwargs: Additional keyword arguments for the API request. 
-    
-        Returns: 
-            dict: The response JSON containing the record information. 
-    
-        Raises: 
-            APIResponseError: If the response status code indicates an error during the API request. 
-        """ 
-        if isinstance(record_id, dict):
-            record_id = record_id['id']
-        url = f"{self.base_url}/api/records/{record_id}"
-        response = self._req.get(url, **kwargs)
-        return response.json()
-    
     def iter_pagination(self, data: Dict[str,Any], limit: Optional[int]=None, **kwargs) -> Iterator[Dict[str,Any]]:
         """Iterates over paginated data from the InvenioRDM API. 
     
@@ -337,126 +425,6 @@ class InvenioRDMClient:
             yield page
             i += 1
     
-    def list_depositions(self, query_args: Optional[Dict[str,Any]]=None, **kwargs) -> Dict:
-        """Retrieves a list of depositions from the InvenioRDM API. 
-    
-        Args: 
-            query_args (Optional[Dict[str,Any]]=None): Additional query arguments for the API request. 
-            **kwargs: Additional keyword arguments for the API request. 
-    
-        Returns: 
-            dict: The response JSON containing the list of depositions. 
-    
-        Raises: 
-            TypeError: If the query_args parameter is not a dictionary. 
-            APIResponseError: If the response status code indicates an error during the API request. 
-        """ 
-        if query_args is not None and not isinstance(query_args, dict):
-            raise TypeError('Invalid `query_args` parameter. Value must be `dict` but got ' +
-                            f'`{type(query_args)}` instead.')
-        url = f"{self.base_url}/api/deposit/depositions"
-        response = self._req.get(url, params=query_args, **kwargs)
-        return response.json()
-    
-    def create_deposition(self, metadata: Optional[Dict[str,Any]]=None, **kwargs) -> Dict:
-        """Creates a new deposition on the InvenioRDM API. 
-    
-        Args: 
-            metadata (Optional[Dict[str,Any]]=None): The metadata for the new deposition. 
-            **kwargs: Additional keyword arguments for the API request. 
-    
-        Returns: 
-            dict: The response JSON containing the newly created deposition. 
-    
-        Raises: 
-            ValueError: If the metadata parameter is not a dictionary. 
-            APIResponseError: If the response status code indicates an error during the API request. 
-        """ 
-        if metadata is None:
-            metadata = dict()
-        if not isinstance(metadata, dict):
-            raise TypeError('Invalid `metadata` parameter. Value must be `dict` but got ' +
-                            f'`{type(metadata)}` instead.')
-        if len(metadata) > 0 and 'metadata' not in metadata:
-            metadata = dict(metadata=metadata)
-        url = f"{self.base_url}/api/deposit/depositions"
-        response = self._req.post(url, json=metadata, **kwargs)
-        return response.json()
-        
-    
-    def retrieve_deposition(self, deposition_id: Union[int,Dict], **kwargs) -> Dict:
-        """Retrieves a specific deposition from the InvenioRDM API.
-
-        Args: 
-            deposition_id (Union[int,Dict]): The ID of the deposition to retrieve, or a dictionary 
-                containing the deposition information. 
-            **kwargs: Additional keyword arguments for the API request. 
-        
-        Returns: 
-            dict: The response JSON containing the deposition information. 
-        
-        Raises: 
-            APIResponseError: If the response status code indicates an error during the API request. 
-        
-        """ 
-        if isinstance(deposition_id, dict):
-            deposition_id = deposition_id['id']
-        if not isinstance(deposition_id, int):
-            raise TypeError('Invalid `deposition_id` parameter. Value must be `int` but got ' +
-                            f'`{type(deposition_id)}`.')
-        url = f"{self.base_url}/api/deposit/depositions/{deposition_id}"
-        response = self._req.get(url, **kwargs)
-        return response.json()
-    
-    def update_deposition(self, deposition_id: Union[int,Dict], 
-                          metadata: Dict[str,Any], **kwargs) -> Dict:
-        """Updates a specific deposition on the InvenioRDM API.
-        
-        Args: 
-            deposition_id (Union[int,Dict]): The ID of the deposition to update, or a dictionary 
-                containing the deposition information. 
-            metadata (Dict[str,Any]): The updated metadata for the deposition. 
-            **kwargs: Additional keyword arguments for the API request. 
-        
-        Returns: 
-            dict: The response JSON containing the updated deposition.
-        
-        Raises: 
-            ValueError: If the metadata parameter is not a dictionary. 
-            APIResponseError: If the response status code indicates an error during the API request. 
-
-        """ 
-        if isinstance(deposition_id, dict):
-            deposition_id = deposition_id['id']
-        if not isinstance(metadata, dict):
-            raise TypeError('Invalid `metadata` parameter. Value must be `dict` but got ' +
-                            f'`{type(metadata)}` instead.')
-        if 'metadata' not in metadata:
-            metadata = dict(metadata=metadata)
-        url = f"{self.base_url}/api/deposit/depositions/{deposition_id}"
-        response = self._req.put(url, json=metadata, **kwargs)
-        return response.json()
-    
-    def delete_deposition(self, deposition_id: Union[int,Dict], **kwargs) -> None:
-        """Deletes a specific deposition from the InvenioRDM API. 
-    
-        Args: 
-            deposition_id (Union[int,Dict]): The ID of the deposition to delete, or a dictionary 
-                containing the deposition information. 
-            **kwargs: Additional keyword arguments for the API request. 
-    
-        Returns: 
-            None 
-    
-        Raises: 
-            APIResponseError: If the response status code indicates an error during the API request. 
-        
-        """ 
-        if isinstance(deposition_id, dict):
-            deposition_id = deposition_id['id']
-        url = f"{self.base_url}/api/deposit/depositions/{deposition_id}"
-        self._req.delete(url, **kwargs)
-        
     def get_deposition_bucket(self, deposition_id: Union[int,Dict]) -> str:
         """Retrieves the bucket URL for a specific deposition on the InvenioRDM API. 
     
@@ -495,69 +463,6 @@ class InvenioRDMClient:
             deposition_id = deposition_id['id']
         url = f"{self.base_url}/api/deposit/depositions/{deposition_id}/files"
         response = self._req.get(url, **kwargs)
-        return response.json()
-    
-    def publish_deposition(self, deposition_id: Union[int,Dict], **kwargs) -> Dict:
-        """Publishes a specific deposition on the InvenioRDM API. 
-    
-        Args: 
-            deposition_id (Union[int,Dict]): The ID of the deposition to publish, or a dictionary 
-                containing the deposition information. 
-            **kwargs: Additional keyword arguments for the API request. 
-    
-        Returns: 
-            dict: The response JSON containing the published deposition. 
-    
-        Raises: 
-            APIResponseError: If the response status code indicates an error during the API request. 
-        
-        """ 
-        if isinstance(deposition_id, dict):
-            deposition_id = deposition_id['id']
-        url = f"{self.base_url}/api/deposit/depositions/{deposition_id}/actions/publish"
-        response = self._req.post(url, **kwargs)
-        return response.json()
-    
-    def edit_deposition(self, deposition_id: Union[int,Dict], **kwargs) -> Dict:
-        """Sets a specific deposition to the "edit" state on the InvenioRDM API. 
-    
-        Args: 
-            deposition_id (Union[int,Dict]): The ID of the deposition to set to "edit", or a 
-                dictionary containing the deposition information. 
-            **kwargs: Additional keyword arguments for the API request. 
-    
-        Returns: 
-            dict: The response JSON containing the edited deposition. 
-    
-        Raises: 
-            APIResponseError: If the response status code indicates an error during the API request. 
-        
-        """ 
-        if isinstance(deposition_id, dict):
-            deposition_id = deposition_id['id']
-        url = f"{self.base_url}/api/deposit/depositions/{deposition_id}/actions/edit"
-        response = self._req.post(url, **kwargs)
-        return response.json()
-    
-    def discard_deposition(self, deposition_id: Union[int,Dict], **kwargs) -> Dict:
-        """Discards changes of a specific deposition on the InvenioRDM API. 
-    
-        Args: 
-            deposition_id (Union[int,Dict]): The ID of the deposition to discard changes, or a 
-                dictionary containing the deposition information. 
-            **kwargs: Additional keyword arguments for the API request. 
-    
-        Returns: 
-            dict: The response JSON containing the deposition with the discarded changes. 
-    
-        Raises: 
-            APIResponseError: If the response status code indicates an error during the API request. 
-        
-        """ 
-        if isinstance(deposition_id, dict):
-            deposition_id = deposition_id['id']
-        url = f"{self.base_url}/api/deposit/depositions/{deposition_id}/actions/discard"
-        response = self._req.post(url, **kwargs)
         return response.json()
     
     def new_version_deposition(self, deposition_id: Union[int,Dict], **kwargs) -> Dict:
@@ -702,9 +607,26 @@ class InvenioRDMClient:
         if file_id['checksum'].startswith('md5:'):
             return file_id['checksum'][4:]
         return file_id['checksum']
-    
-    @property
-    def request(self) -> _HTTPRequest:
-        return self._req
 
+
+def _embargo(active, until, reason):
+    data = dict(active=active)
+    if until is not None:
+        data['until'] = until
+    if reason is not None:
+        data['reason'] = reason
+    return data
+
+def access(record, files, embargo_active=None, embargo_until=None, embargo_reason=None):
+    data = dict(record=record, files=files)
+    if embargo_active is not None:
+        data['embargo'] = _embargo(embargo_active, embargo_until, embargo_reason)
+    return data
+
+def access_public():
+    return access(record='public', files='public')
+
+def access_restricted(embargo_active=False, until=None, reason=None):
+    return access(record='restricted', files='restricted', 
+                  embargo=_embargo(embargo_active, until, reason))
 

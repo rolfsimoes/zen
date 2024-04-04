@@ -10,5 +10,6 @@ _build/
 
 # Local support files
 .test.ipynb
+.test.json
 zen.code-workspace
 .vscode/settings.json
