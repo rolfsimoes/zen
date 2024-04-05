@@ -15,6 +15,18 @@ class _BaseRecord:
         self._data = data
         self._api = api
     
+    def refresh(self) -> Self:
+        url = self.links['self']
+        response = self._api._get(url)
+        self._data = response.json()
+        return self
+    
+    def list_files(self) -> Dict[str, Any]:
+        url = self.links['files']
+        response = self._api._get(url)
+        data = response.json()
+        return data
+    
     def to_json(self, filename: str) -> None:
         """Saves the draft data to a JSON file.
 
@@ -28,7 +40,7 @@ class _BaseRecord:
     
     @property
     def access(self) -> Dict:
-        if 'access' in self._data:
+        if 'access' in self._data: # not implemented by Zenodo
             return self._data['access']
 
     @property
@@ -111,9 +123,7 @@ class Draft(_BaseRecord):
             APIResponseError: If the response status code indicates an error during 
             the API request.
         """
-        response = self._api._get(f'/api/records/{self.id}/draft')
-        self._data = response.json()
-        return self
+        return super().refresh()
 
     def update(self, custom_fields: Optional[List[str]]=None) -> Self:
         """Updates changes made to the draft.
@@ -126,6 +136,7 @@ class Draft(_BaseRecord):
         Raises:
             APIResponseError: If the response status code indicates an error during the API request.
         """
+        url = self.links['self']
         body_fields = ['access', 'files', 'metadata']
         if custom_fields is not None:
             if not isinstance(custom_fields, list):
@@ -133,9 +144,9 @@ class Draft(_BaseRecord):
                                 f'but got {type(custom_fields)} instead.')
             if not all([isinstance(field, str) for field in custom_fields]):
                 raise ValueError('Invalid `custom_fields` parameter. Not all elements are `str`.')
-            body_fields += custom_fields
+            body_fields += [field for field in custom_fields if field not in body_fields]
         body = {field: self._data[field] for field in body_fields}
-        self._api._put(f'/api/records/{self.id}/draft', json=body)
+        self._api._put(url, json=body)
         return self
 
     def publish(self) -> Self:
@@ -149,7 +160,8 @@ class Draft(_BaseRecord):
         Raises:
             APIResponseError: If the response status code indicates an error during the API request.
         """
-        response = self._api._post(f'/api/records/{self.id}/draft/actions/publish')
+        url = self.links['publish']
+        response = self._api._post(url)
         self._data = response.json()
         return self
 
@@ -164,7 +176,8 @@ class Draft(_BaseRecord):
         Raises:
             APIResponseError: If the response status code indicates an error during the API request.
         """
-        response = self._api._post(f'/api/records/{self.id}/draft')
+        url = self.links['self']
+        response = self._api._post(url)
         self._data = response.json()
         return self
 
@@ -182,19 +195,28 @@ class Draft(_BaseRecord):
         Raises:
             APIResponseError: If the response status code indicates an error during the API request.
         """
-        self._api._delete(f'/api/records/{self.id}/draft')
+        url = self.links['self']
+        self._api._delete(url)
+    
+    def list_files(self) -> Dict[str, Any]:
+        return super().list_files()
+    
+    def to_json(self, filename: str) -> None:
+        """Saves the draft data to a JSON file.
+
+        Args:
+            filename (str): The name of the JSON file to save.
+
+        Raises:
+            FileNotFoundError: If the file cannot be created or written to.
+        """
+        super().to_json(filename)
 
     @property
     def concept_id(self) -> str:
         """Returns the concept ID of the record."""
         if 'conceptrecid' in self._data and self._data['conceptrecid'] != '':
             return self._data['conceptrecid']
-
-    @property
-    def doi(self) -> str:
-        """Returns the DOI of the record."""
-        # Implement logic to fetch DOI from draft data
-        pass
     
     @property
     def access(self) -> Dict:
@@ -282,7 +304,7 @@ class Record(_BaseRecord):
         super().__init__(data, api)
     
     def refresh(self) -> Self:
-        """Refreshes the draft data from API.
+        """Refreshes the record data from API.
         
         This method sends a request to the API to fetch the most up-to-date details
         about the draft record. It discards any non-saved editions.
@@ -294,10 +316,22 @@ class Record(_BaseRecord):
             APIResponseError: If the response status code indicates an error during 
             the API request.
         """
-        response = self._api._get(f'/api/records/{self.id}')
-        self._data = response.json()
-        return self
+        return super().refresh()
     
+    def list_files(self) -> Dict[str, Any]:
+        return super().list_files()
+    
+    def to_json(self, filename: str) -> None:
+        """Saves the draft data to a JSON file.
+
+        Args:
+            filename (str): The name of the JSON file to save.
+
+        Raises:
+            FileNotFoundError: If the file cannot be created or written to.
+        """
+        super().to_json(filename)
+
     @property
     def access(self) -> Dict:
         """Returns the access policy of the record."""

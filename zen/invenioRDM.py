@@ -131,6 +131,9 @@ class InvenioRDMError(Exception):
         except:
             return InvenioRDMError.bad_status_codes[self.status_code]['description']
 
+class NoNextPageError(Exception):
+    pass
+
 class InvenioRDM:
     """Interact with InvenioRDM API.
     
@@ -156,58 +159,57 @@ class InvenioRDM:
         self._params = None
         self._headers = dict(Accept='application/json')
         if token is not None:
-            self._params = merge(self._params, dict(access_token=f'{token}'))
+            #self._params = merge(self._params, dict(access_token=f'{token}'))
             self._headers = merge(self._headers, dict(Authorization=f'Bearer {token}'))
         if params is not None:
             self._params = merge(self._params, params)
         if headers is not None:
             self._headers = merge(self._headers, headers)
     
+    def _url(self, path):
+        return f'{self.base_url}{path}'
+        
     def _get(self, 
-            path: str,
-            params: Optional[Dict[str,str]]=None,
-            headers: Optional[Dict[str,str]]=None, **kwargs) -> Response:
-        url = f'{self.base_url}{path}'
-        response = requests.get(url, params=merge(self._params, params), 
+             url: str,
+             params: Optional[Dict[str,str]]=None,
+             headers: Optional[Dict[str,str]]=None, **kwargs) -> Response:
+        response = requests.get(url=url, params=merge(self._params, params), 
                                 headers=merge(self._headers, headers), **kwargs)
         if response.status_code in InvenioRDMError.bad_status_codes:
             raise InvenioRDMError(response)
         return response
     
     def _post(self, 
-             path: str,
-             json: Optional[Dict[str,Any]]=None,
-             data: Optional[Any]=None,
-             params: Optional[Dict[str,str]]=None,
-             headers: Optional[Dict[str,str]]=None, **kwargs) -> Response:
-        url = f'{self.base_url}{path}'
-        response = requests.post(url, data=data, json=json, params=merge(self._params, params), 
+              url: str,
+              json: Optional[Dict[str,Any]]=None,
+              data: Optional[Any]=None,
+              params: Optional[Dict[str,str]]=None,
+              headers: Optional[Dict[str,str]]=None, **kwargs) -> Response:
+        response = requests.post(url=url, data=data, json=json, params=merge(self._params, params), 
                                  headers=merge(self._headers, headers), **kwargs)
         if response.status_code in InvenioRDMError.bad_status_codes:
             raise InvenioRDMError(response)
         return response
     
     def _put(self, 
-            path: str,
-            json: Optional[Dict[str,Any]]=None,
-            data: Optional[Any]=None,
-            params: Optional[Dict[str,str]]=None,
-            headers: Optional[Dict[str,str]]=None, **kwargs) -> Response:
-        url = f'{self.base_url}{path}'
-        response = requests.put(url, data=data, json=json, params=merge(self._params, params), 
+             url: str,
+             json: Optional[Dict[str,Any]]=None,
+             data: Optional[Any]=None,
+             params: Optional[Dict[str,str]]=None,
+             headers: Optional[Dict[str,str]]=None, **kwargs) -> Response:
+        response = requests.put(url=url, data=data, json=json, params=merge(self._params, params), 
                                 headers=merge(self._headers, headers), **kwargs)
         if response.status_code in InvenioRDMError.bad_status_codes:
             raise InvenioRDMError(response)
         return response
     
     def _delete(self, 
-               path: str,
-               json: Optional[Dict[str,Any]]=None,
-               data: Optional[Any]=None,
-               params: Optional[Dict[str,str]]=None,
-               headers: Optional[Dict[str,str]]=None, **kwargs) -> Response:
-        url = f'{self.base_url}{path}'
-        response = requests.delete(url, data=data, json=json, params=merge(self._params, params), 
+                url: str,
+                json: Optional[Dict[str,Any]]=None,
+                data: Optional[Any]=None,
+                params: Optional[Dict[str,str]]=None,
+                headers: Optional[Dict[str,str]]=None, **kwargs) -> Response:
+        response = requests.delete(url=url, data=data, json=json, params=merge(self._params, params), 
                                    headers=merge(self._headers, headers), **kwargs)
         if response.status_code in InvenioRDMError.bad_status_codes:
             raise InvenioRDMError(response)
@@ -235,7 +237,7 @@ class InvenioRDM:
             APIResponseError: If the response status code indicates an error during the API request. 
         """ 
         query = dict(q=q, sort=sort, size=size, page=page, allversions=all_versions)
-        response = self._get(f'/api/user/records', 
+        response = self._get(url=self._url(f'/api/user/records'), 
                              params=merge(params, query), 
                              headers=headers)
         data = response.json()
@@ -243,7 +245,8 @@ class InvenioRDM:
 
     def create_draft(self,
                      params: Optional[Dict[str,str]]=None, 
-                     headers: Optional[Dict[str,str]]=None) -> Draft:
+                     headers: Optional[Dict[str,str]]=None,
+                     quietly: bool=False) -> Draft:
         """Creates a new deposition on the InvenioRDM API. 
     
         Args: 
@@ -257,10 +260,12 @@ class InvenioRDM:
             ValueError: If the metadata parameter is not a dictionary. 
             APIResponseError: If the response status code indicates an error during the API request. 
         """ 
+        url = self._url('/api/records')
         body = dict(access=access_public(), files=dict(enabled=True))
-        response = self._post(f'/api/records', json=body, params=params, headers=headers)
-        data = response.json()
-        return Draft(data, self)
+        response = self._post(url, json=body, params=params, headers=headers)
+        draft = Draft(response.json(), self)
+        if not quietly: print(f'New Draft (id={draft.id}) created.')
+        return draft
 
     def get_draft(self,
                   id: str, 
@@ -280,14 +285,16 @@ class InvenioRDM:
             APIResponseError: If the response status code indicates an error during the API request. 
         
         """ 
-        response = self._get(f'/api/records/{id}/draft', params=params, headers=headers)
+        url = self._url(f'/api/records/{id}/draft')
+        response = self._get(url=url, params=params, headers=headers)
         data = response.json()
         return Draft(data, self)
 
     def load_draft(self,
                    filename: str,
                    params: Optional[Dict[str,str]]=None, 
-                   headers: Optional[Dict[str,str]]=None) -> Draft:
+                   headers: Optional[Dict[str,str]]=None,
+                   quietly: bool=False) -> Draft:
         try:
             data = load_json(filename)
             if not isinstance(data, dict):
@@ -295,20 +302,24 @@ class InvenioRDM:
                                 f'but got `{type(data)}` instead.')
             if 'id' not in data:
                 raise ValueError('Invalid file content. `id` entry not found.')
-            id = data['id']
-            return self.get_draft(id, params, headers)
+            draft = self.get_draft(data['id'], params, headers)
+            if not quietly: print(f"Draft (id={draft.id}) loaded from '{filename}'")
+            return draft
         except FileNotFoundError:
             raise FileNotFoundError(f'File `{filename}` not found.')
 
     def load_or_create_draft(self,
                              filename: str,
                              params: Optional[Dict[str,str]]=None,
-                             headers: Optional[Dict[str,str]]=None) -> Draft:
+                             headers: Optional[Dict[str,str]]=None,
+                             quietly: bool=False) -> Draft:
         try:
-            draft = self.load_draft(filename, params, headers)
+            draft = self.load_draft(filename, params, headers, quietly)
         except FileNotFoundError:
-            draft = self.create_draft(params, headers)
+            if not quietly: print(f"File '{filename}' not found.")
+            draft = self.create_draft(params, headers, quietly)
             draft.to_json(filename)
+            if not quietly: print(f"Draft saved at '{filename}'.")
         return draft
 
     def get_record(self,
@@ -326,7 +337,9 @@ class InvenioRDM:
         Raises: 
             InvenioRDMError: If the response status code indicates an error during the request.
         """ 
-        response = self._get(f'/api/records/{id}', params=params, headers=headers)
+        response = self._get(url=self._url(f'/api/records/{id}'), 
+                             params=params, 
+                             headers=headers)
         data = response.json()
         return Record(data, self)
 
@@ -349,100 +362,40 @@ class InvenioRDM:
     
         Raises: 
             TypeError: If the query_args parameter is not a dictionary. 
-            APIResponseError: If the response status code indicates an error during the API request. 
+            InvenioRDMError: If the response status code indicates an error during the API request. 
         """ 
         query = dict(q=q, sort=sort, size=size, page=page, allversions=all_versions)
-        response = self._get(f'/api/records', 
+        response = self._get(url=self._url(f'/api/records'), 
                              params=merge(params, query), 
                              headers=headers)
         data = response.json()
         return data
     
-    def list_licenses(self, query_args: Optional[Dict[str,Any]]=None, 
-                          **kwargs) -> Dict:
-        """Retrieves a list of licenses entries.
-
-        Args: 
-            query_args (Optional[Dict[str,Any]]=None): Additional query arguments for the API request. 
-            **kwargs: Additional keyword arguments for the API request. 
-        
-        Returns: 
-            dict: The response JSON containing the list of licenses entries. 
-        
-        Raises: 
-            TypeError: If the `query_args` parameter is not a dictionary. 
-            APIResponseError: If the response status code indicates an error during the API request. 
-        
-        """ 
-        if query_args is not None and not isinstance(query_args, dict):
-            raise TypeError('Invalid `query_args` parameter. Value must be `dict` but got ' +
-                            f'`{type(query_args)}`.')
-        url = f"{self.base_url}/api/licenses"
-        response = self._req.get(url, params=query_args, **kwargs)
-        return response.json()
-    
-    def retrieve_license(self, license_id: str, **kwargs) -> Dict:
-        """Retrieves a specific license entry from the InvenioRDM API. 
+    def next_page(self, 
+                  data: Dict[str,Any],
+                  headers: Optional[Dict[str,str]]=None, 
+                  **kwargs) -> Dict[str,Any]:
+        """Get the next page from a paginated data of the InvenioRDM API.
     
         Args: 
-            license_id (str): The ID of the license to retrieve. 
-            **kwargs: Additional keyword arguments for the API request. 
+            data (Dict[str,Any]): The current page of data from the API response. 
+            **kwargs: Additional keyword arguments for the API request.
     
         Returns: 
-            dict: The response JSON containing the license entry information. 
+            Dict[str,Any]: The next page of data. 
     
         Raises: 
-            APIResponseError: If the response status code indicates an error during the API request. 
+            InvenioRDMError: If the response status code indicates an error during the API request. 
+            NoNextPageError: If there is no new page to retrieve
+        """ 
+        if not 'links' in data and 'next' in data['links']:
+            raise NoNextPageError("No 'next' field found in the data.")
         
-        """ 
-        if isinstance(license_id, dict):
-            license_id = license_id['id']
-        url = f"{self.base_url}/api/licenses/{license_id}"
-        response = self._req.get(url, **kwargs)
-        return response.json()
-    
-    def iter_pagination(self, data: Dict[str,Any], limit: Optional[int]=None, **kwargs) -> Iterator[Dict[str,Any]]:
-        """Iterates over paginated data from the InvenioRDM API. 
-    
-        Args: 
-            data (Dict[str,Any]): The initial page of data from the API response. 
-            limit (Optional[int]=None): The maximum number of pages to retrieve. 
-            **kwargs: Additional keyword arguments for the API request. 
-    
-        Returns: 
-            Iterator[Dict[str,Any]]: An iterator that yields each page of data. 
-    
-        Raises: 
-            APIResponseError: If the response status code indicates an error during the API request. 
-        """ 
-        page = data
-        yield page
-        i = 0
-        while 'links' in page and 'next' in page['links'] and (limit is None or i < limit):
-            url = page['links']['next']
-            response = self._req.get(url, **kwargs)
-            page = response.json()
-            yield page
-            i += 1
-    
-    def get_deposition_bucket(self, deposition_id: Union[int,Dict]) -> str:
-        """Retrieves the bucket URL for a specific deposition on the InvenioRDM API. 
-    
-        Args: 
-            deposition_id (Union[int,Dict]): The ID of the deposition, or a dictionary containing the 
-                deposition information. 
-    
-        Returns: 
-            str: The URL of the deposition's bucket. 
-    
-        Raises: 
-            APIResponseError: If the response status code indicates an error during the API request. 
+        url = data['links']['next']
+        response = self._get(url, headers=headers, **kwargs)
+        data = response.json()
+        return data
         
-        """ 
-        if not isinstance(deposition_id, dict) or 'links' not in deposition_id or \
-            'bucket' not in deposition_id['links']:
-            deposition_id = self.retrieve_deposition(deposition_id)
-        return deposition_id['links']['bucket']
     
     def list_deposition_files(self, deposition_id: Union[int,Dict], **kwargs) -> Dict:
         """Retrieves a list of files for a specific deposition from the InvenioRDM API. 
@@ -609,6 +562,70 @@ class InvenioRDM:
         return file_id['checksum']
 
 
+class _Page:
+    def __init__(self, page: Dict[str,Any], api: InvenioRDM) -> None:
+        self._start_page = page
+        self._api = api
+        self._pages_iter: Iterator[Dict[str,Any]] = None
+        self._page: Dict[str,Any] = None
+        self._num_pages = 0
+        self.first_page()
+        if len(self) > 0:
+            self._num_pages = self.total / len(self)
+    
+    def __repr__(self) -> str:
+        items = [item['id'] for item in self.data['hits']['hits']]
+        return str(dict(total=self.total, items=items))
+    
+    def __len__(self):
+        return len(self.data['hits']['hits'])
+    
+    def __getitem__(self, key: int) -> Dict[str,Any]:
+        return self._item(self.data['hits']['hits'][key])
+    
+    def __iter__(self) -> Iterator[Dict[str,Any]]:
+        for license in self.data['hits']['hits']:
+            yield self._item(license)
+    
+    def _item(self, item: Dict[str,Any]) -> Dict[str,Any]:
+        return item
+    
+    def first_page(self) -> Self:
+        self._pages_iter = self._api.api.iter_pagination(self._start_page, limit=1)
+        self._page = next(self._pages_iter)
+        return self
+    
+    def next_page(self) -> Self:
+        if self._pages_iter is None:
+            self._pages_iter = self._api.api.iter_pagination(self._start_page, limit=1)
+        self._page = next(self._pages_iter)
+        return self
+    
+    @property
+    def data(self) -> Dict[str,Any]:
+        if self._page is None:
+            self.next_page()
+        return self._page
+    
+    @property
+    def total(self) -> int:
+        return self.data['hits']['total']
+    
+    @property
+    def links(self) -> Dict[str,str]:
+        return self.data['links']
+    
+    @property
+    def pages(self) -> Iterator[Dict[str,Any]]:
+        yield self.first_page()
+        while True:
+            yield self.next_page()
+    
+    @property
+    def num_pages(self) -> int:
+        return self._num_pages
+
+    
 def _embargo(active, until, reason):
     data = dict(active=active)
     if until is not None:
