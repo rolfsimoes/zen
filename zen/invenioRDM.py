@@ -26,7 +26,7 @@ from typing import Tuple, List, Dict, Any, Optional, Union, Iterator, TYPE_CHECK
 from typing_extensions import Self
 import requests
 import os
-from .record import Draft, Record
+from .record import RecordFile, DraftFile, RecordFiles, DraftFiles, Record, Draft
 from .utils import merge, load_json
 if TYPE_CHECKING:
     from requests import Response
@@ -160,7 +160,7 @@ class InvenioRDM:
         self._headers = dict(Accept='application/json')
         if token is not None:
             #self._params = merge(self._params, dict(access_token=f'{token}'))
-            self._headers = merge(self._headers, dict(Authorization=f'Bearer {token}'))
+            self._headers = merge(self._headers, self._authorization(token))
         if params is not None:
             self._params = merge(self._params, params)
         if headers is not None:
@@ -168,8 +168,11 @@ class InvenioRDM:
     
     def _url(self, path):
         return f'{self.base_url}{path}'
+    
+    def _authorization(self, token):
+        return dict(Authorization=f'Bearer {token}')
         
-    def _get(self, 
+    def http_get(self, 
              url: str,
              params: Optional[Dict[str,str]]=None,
              headers: Optional[Dict[str,str]]=None, **kwargs) -> Response:
@@ -179,7 +182,7 @@ class InvenioRDM:
             raise InvenioRDMError(response)
         return response
     
-    def _post(self, 
+    def http_post(self, 
               url: str,
               json: Optional[Dict[str,Any]]=None,
               data: Optional[Any]=None,
@@ -191,7 +194,7 @@ class InvenioRDM:
             raise InvenioRDMError(response)
         return response
     
-    def _put(self, 
+    def http_put(self, 
              url: str,
              json: Optional[Dict[str,Any]]=None,
              data: Optional[Any]=None,
@@ -203,7 +206,7 @@ class InvenioRDM:
             raise InvenioRDMError(response)
         return response
     
-    def _delete(self, 
+    def http_delete(self, 
                 url: str,
                 json: Optional[Dict[str,Any]]=None,
                 data: Optional[Any]=None,
@@ -221,6 +224,7 @@ class InvenioRDM:
                     size: int=10, 
                     page: int=1, 
                     all_versions: bool=False,
+                    token: Optional[str]=None,
                     params: Optional[Dict[str,str]]=None, 
                     headers: Optional[Dict[str,str]]=None) -> Draft:
         """Retrieves a list of drafts from the InvenioRDM API. 
@@ -237,13 +241,16 @@ class InvenioRDM:
             APIResponseError: If the response status code indicates an error during the API request. 
         """ 
         query = dict(q=q, sort=sort, size=size, page=page, allversions=all_versions)
-        response = self._get(url=self._url(f'/api/user/records'), 
+        if token is not None:
+            headers = merge(headers, self._authorization(token))
+        response = self.http_get(url=self._url(f'/api/user/records'), 
                              params=merge(params, query), 
                              headers=headers)
         data = response.json()
         return data
 
     def create_draft(self,
+                     token: Optional[str]=None,
                      params: Optional[Dict[str,str]]=None, 
                      headers: Optional[Dict[str,str]]=None,
                      quietly: bool=False) -> Draft:
@@ -262,13 +269,18 @@ class InvenioRDM:
         """ 
         url = self._url('/api/records')
         body = dict(access=access_public(), files=dict(enabled=True))
-        response = self._post(url, json=body, params=params, headers=headers)
-        draft = Draft(response.json(), self)
+        if token is not None:
+            headers = merge(headers, self._authorization(token))
+        response = self.http_post(url, json=body, params=params, headers=headers)
+        data = response.json()
+        draft = Draft(data, InvenioRDM(self.base_url, params=params, headers=headers))
+        draft.refresh_files()
         if not quietly: print(f'New Draft (id={draft.id}) created.')
         return draft
 
     def get_draft(self,
                   id: str, 
+                  token: Optional[str]=None,
                   params: Optional[Dict[str,str]]=None, 
                   headers: Optional[Dict[str,str]]=None) -> Draft:
         """Retrieves a specific deposition from the InvenioRDM API.
@@ -286,23 +298,25 @@ class InvenioRDM:
         
         """ 
         url = self._url(f'/api/records/{id}/draft')
-        response = self._get(url=url, params=params, headers=headers)
+        if token is not None:
+            headers = merge(headers, self._authorization(token))
+        response = self.http_get(url=url, params=params, headers=headers)
         data = response.json()
-        return Draft(data, self)
+        draft = Draft(data, InvenioRDM(self.base_url, params=params, headers=headers))
+        draft.refresh_files()
+        return draft
 
     def load_draft(self,
                    filename: str,
+                   token: Optional[str]=None,
                    params: Optional[Dict[str,str]]=None, 
                    headers: Optional[Dict[str,str]]=None,
                    quietly: bool=False) -> Draft:
         try:
             data = load_json(filename)
-            if not isinstance(data, dict):
-                raise TypeError('Invalid file content. Expecting `dict` ' +
-                                f'but got `{type(data)}` instead.')
-            if 'id' not in data:
-                raise ValueError('Invalid file content. `id` entry not found.')
-            draft = self.get_draft(data['id'], params, headers)
+            if token is not None:
+                headers = merge(headers, self._authorization(token))
+            draft = Draft(data, InvenioRDM(self.base_url, params=params, headers=headers))
             if not quietly: print(f"Draft (id={draft.id}) loaded from '{filename}'")
             return draft
         except FileNotFoundError:
@@ -310,17 +324,31 @@ class InvenioRDM:
 
     def load_or_create_draft(self,
                              filename: str,
+                             token: Optional[str]=None,
                              params: Optional[Dict[str,str]]=None,
                              headers: Optional[Dict[str,str]]=None,
                              quietly: bool=False) -> Draft:
         try:
-            draft = self.load_draft(filename, params, headers, quietly)
+            draft = self.load_draft(filename, token, params, headers, quietly)
         except FileNotFoundError:
             if not quietly: print(f"File '{filename}' not found.")
-            draft = self.create_draft(params, headers, quietly)
+            draft = self.create_draft(token, params, headers, quietly)
             draft.to_json(filename)
             if not quietly: print(f"Draft saved at '{filename}'.")
         return draft
+    
+    def list_draft_files(self,
+                         id: str, 
+                         token: Optional[str]=None,
+                         params: Optional[Dict[str,str]]=None, 
+                         headers: Optional[Dict[str,str]]=None):
+        url = self._url(f'/api/records/{id}/draft/files')
+        if token is not None:
+            headers = merge(headers, self._authorization(token))
+        response = self.http_get(url=url, params=params, headers=headers)
+        data = response.json()
+        files = DraftFiles(data, InvenioRDM(self.base_url, params=params, headers=headers))
+        return files
 
     def get_record(self,
                    id: str,
@@ -337,12 +365,22 @@ class InvenioRDM:
         Raises: 
             InvenioRDMError: If the response status code indicates an error during the request.
         """ 
-        response = self._get(url=self._url(f'/api/records/{id}'), 
-                             params=params, 
-                             headers=headers)
+        response = self.http_get(url=self._url(f'/api/records/{id}'), 
+                                 params=params, 
+                                 headers=headers)
         data = response.json()
         return Record(data, self)
 
+    def list_record_files(self,
+                          id: str, 
+                          params: Optional[Dict[str,str]]=None, 
+                          headers: Optional[Dict[str,str]]=None):
+        url = self._url(f'/api/records/{id}/files')
+        response = self.http_get(url=url, params=params, headers=headers)
+        data = response.json()
+        files = RecordFiles(data, InvenioRDM(self.base_url, params=params, headers=headers))
+        return files
+    
     def search_records(self,
                        q: Optional[str]=None, 
                        sort: str=None, 
@@ -365,7 +403,7 @@ class InvenioRDM:
             InvenioRDMError: If the response status code indicates an error during the API request. 
         """ 
         query = dict(q=q, sort=sort, size=size, page=page, allversions=all_versions)
-        response = self._get(url=self._url(f'/api/records'), 
+        response = self.http_get(url=self._url(f'/api/records'), 
                              params=merge(params, query), 
                              headers=headers)
         data = response.json()
@@ -392,7 +430,7 @@ class InvenioRDM:
             raise NoNextPageError("No 'next' field found in the data.")
         
         url = data['links']['next']
-        response = self._get(url, headers=headers, **kwargs)
+        response = self.http_get(url, headers=headers, **kwargs)
         data = response.json()
         return data
         
