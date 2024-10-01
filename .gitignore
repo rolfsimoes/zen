@@ -9,5 +9,7 @@ dist/
 _build/
 
 # Local support files
+.test.ipynb
+.test.py
 zen.code-workspace
 .vscode/settings.json
