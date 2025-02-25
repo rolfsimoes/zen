@@ -121,6 +121,8 @@ import requests
 from tqdm import tqdm
 import time
 import random
+import warnings
+
 
 class BaseFile(dict):
     """Base Class for Representing Files with Associated Metadata.
@@ -798,6 +800,12 @@ class LocalFiles(_FileDataset):
             >>> ds.filenames
         
         """ 
+        warnings.warn(
+            "The 'from_file' method is superseded and will be deprecated in future versions. "
+            "Please LocalFiles(dataset_path=<path.json>).",
+            DeprecationWarning,
+            stacklevel=2
+        )
         dataset = _DatasetFile.from_file(dataset_path)
         ds = cls(files=dataset.localfiles, dataset_path=dataset_path)
         return ds
