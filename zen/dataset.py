@@ -822,7 +822,7 @@ class LocalFiles(_FileDataset):
         super().__init__(files)
         self._data: List[LocalFile] = self._data
         self._index: Dict[str, LocalFile] = self._index
-        self._file = dataset_path
+        self._file = dataset_path        
         self._placeholders = set()
         if template is not None:
             for file in self._data:
@@ -927,7 +927,7 @@ class LocalFiles(_FileDataset):
                 deposition = api.depositions.retrieve(deposition)
             if dataset.zenodo is not None:
                 saved_deposition_id = dataset.zenodo['id']
-                if saved_deposition_id != deposition.id:
+                if dataset.zenodo['conceptrecid'] != deposition.concept_id and saved_deposition_id != deposition.id:
                     raise ValueError('Invalid deposition assignment. The saved deposition ' +
                                     f'({saved_deposition_id}) differs from the provided one ' +
                                     f'({deposition.id}). Please, consider creating a new dataset.')
